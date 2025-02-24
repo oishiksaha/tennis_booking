@@ -162,7 +162,7 @@ def main():
         available_times_all = {}
     for court, court_link in courts.items():
         court_link = courts['Murr Tennis: Court 6 (1.5 Hours)']
-        bookings_made = make_bookings(court_link)
+        bookings_made = make_bookings(driver, court_link)
         if bookings_made:
             print("Booking was made")
             break
