@@ -18,12 +18,20 @@ def go_to_right_day(driver, wait):
     nd_year = str(nd_year)
     nd_month = str(nd_month)
     nd_day = str(nd_day)
-    bad_class="single-date-select-mobile"
-    xpath = f'//button[@data-year={nd_year} and @data-month={nd_month} and @data-day={nd_day} and not(contains(@class,"{bad_class}"))]'
-    next_day = wait.until(EC.presence_of_all_elements_located((By.XPATH, xpath)))
-    if len(next_day) != 1:
-        print("Next day not working")
-    next_day[0].click()
+    # bad_class="single-date-select-mobile"
+    # xpath = f'//button[@data-year={nd_year} and @data-month={nd_month} and @data-day={nd_day} and not(contains(@class,"{bad_class}"))]'
+    xpath = f'//button[@data-year={nd_year} and @data-month={nd_month} and @data-day={nd_day}]'
+    print(xpath)
+    wait = WebDriverWait(driver, 10)
+    next_day = wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
+    # if len(next_day) != 1:
+    #     print("Next day not working")
+    # next_day[0].click()
+    actions = ActionChains(driver)
+    # actions.move_to_element(next_day).click().perform()
+    driver.execute_script("arguments[0].click();", next_day)
+
+
 
     right_arrow_class = 'single-date-right-arrow'
     xpath = f'//button[contains(@class,"{right_arrow_class}")]'
@@ -37,19 +45,20 @@ def go_to_right_day(driver, wait):
     # Add 7 days
     # next_week = given_date + timedelta(days=7)
     next_week = given_date + timedelta(days=2)
-
     
     # Extract year, month, and day
     year, month, day = next_week.year, next_week.month, next_week.day
     year = str(year)
     month = str(month)
     day = str(day)
-    bad_class="single-date-select-mobile"
-    xpath = f'//button[@data-year={year} and @data-month={month} and @data-day={day} and not(contains(@class,"{bad_class}"))]'
-    next_week = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+    # bad_class="single-date-select-mobile"
+    # xpath = f'//button[@data-year={year} and @data-month={month} and @data-day={day} and not(contains(@class,"{bad_class}"))]'
+    xpath = f'//button[@data-year={year} and @data-month={month} and @data-day={day}]'
+    next_week = wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
     # if len(next_day) != 1:
     #     print("Next week not working")
-    next_week.click()
+    # next_week.click()
+    driver.execute_script("arguments[0].click();", next_week)
 
 def wait_for_element(driver, locator, timeout=10):
     try:
@@ -70,36 +79,45 @@ def make_bookings(driver, court_link):
     wait_for_element(driver, (By.CLASS_NAME, "program-instance-card"))
     time_slots = driver.find_elements(By.CLASS_NAME, "program-instance-card")
     
-    for time_slot in time_slots:
+    for index in range(len(time_slots)):
+        # Dynamically find the time_slot again to avoid stale references
+        time_slots = driver.find_elements(By.CLASS_NAME, "program-instance-card")
+        time_slot = time_slots[index]
         # Get the spot availability text
         spots_element = time_slot.find_element(By.CLASS_NAME, "spots-tag")
         spots_text = spots_element.text.strip()
-        select_button = time_slot.find_element(By.CLASS_NAME, "program-select-btn")
+        select_button = 'program-select-btn'
+        xpath = f'//button[contains(@class,"{select_button}")]'
+        select_buttons = driver.find_elements(By.XPATH, xpath)
+        # Assume number of slots equals number of buttons
+        select_button = select_buttons[index]
+        is_disabled = select_button.get_attribute("disabled") is not None
         # Only proceed if there are spots left
-        if "No spots left" not in spots_text and \
-                "disabled" not in select_button.get_attribute("class") and \
-                select_button.is_enabled():
-
+        if "No Spots Left" not in spots_text and not is_disabled:
+            time_slot = driver.find_elements(By.CLASS_NAME, "program-instance-card")[index]
             # Get the time
-            time_element = time_slot.find_element(By.CLASS_NAME, "instance-time-header")
-            time_text = time_element.text.strip()
+            time_text = time_slot.find_element(By.CLASS_NAME, "instance-time-header").text.strip()
 
             # Find the correct div with title="Location"
-            location_div = time_slot.find_element(By.XPATH, './/div[@title="Location"]')
             # Extract court name from the <p> tag inside
-            court_name = location_div.find_element(By.TAG_NAME, "p").text.replace("location_on", "").strip()
+            time_slot = driver.find_elements(By.CLASS_NAME, "program-instance-card")[index]
+            court_name = time_slot.find_element(By.XPATH, './/div[@title="Location"]').find_element(By.TAG_NAME, "p").text.replace("location_on", "").strip()
+            # Assume number of slots equals number of buttons
+            select_button = driver.find_elements(By.XPATH, xpath)[index]
+            driver.execute_script("arguments[0].click();", select_button)
 
-            select_button.click()
+
             # Wait for the "Register" button and click it
-            register_button = wait.until(EC.element_to_be_clickable((By.ID, 'registerBtn')))
-            register_button.click()
+            register_button = wait.until(EC.presence_of_element_located((By.ID, 'registerBtn')))
+            driver.execute_script("arguments[0].click();", register_button)
+
             # Proceed to Checkout
             to_checkout_class = "btn-NextRegistrationStep"
             xpath = f'//button[contains(@class,"{to_checkout_class}")]'
             wait_for_element(driver, (By.XPATH, xpath))
             # to_checkout_button = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
-            element = driver.find_element(By.XPATH, xpath)
-            ActionChains(driver).move_to_element(element).click().perform()
+            proceed_to_checkout_button = driver.find_element(By.XPATH, xpath)
+            driver.execute_script("arguments[0].click();", proceed_to_checkout_button)
 
             # Checkout
             checkout_button_id = "checkoutButton"
@@ -117,9 +135,8 @@ def make_bookings(driver, court_link):
             return bookings_made
     return bookings_made
 
-def main():
-    driver = webdriver.Chrome()
 
+def main():
     chrome_options = Options()
     chrome_options.add_experimental_option("debuggerAddress", "localhost:9222")
 
@@ -145,7 +162,10 @@ def main():
         available_times_all = {}
     for court, court_link in courts.items():
         court_link = courts['Murr Tennis: Court 6 (1.5 Hours)']
-        bookings_made = make_bookings(driver, court_link)
+        bookings_made = make_bookings(court_link)
+        if bookings_made:
+            print("Booking was made")
+            break
     
 if __name__=="__main__":
     main()
