@@ -150,8 +150,13 @@ def main():
 
 
     driver.maximize_window()
-    cookie_button = driver.find_element(By.ID, 'gdpr-cookie-accept')
-    cookie_button.click()
+    try:
+        cookie_button = driver.find_element(By.ID, 'gdpr-cookie-accept')
+        if cookie_button.is_displayed():
+            cookie_button.click()
+    except:
+        print("No cookie button found")
+        pass
 
     elements = driver.find_elements(By.CLASS_NAME, "img-link")
     courts = {}
