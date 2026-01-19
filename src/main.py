@@ -10,6 +10,7 @@ from .auth import AuthHandler
 from .booking_engine import BookingEngine
 from .scheduler import BookingScheduler
 from .manual_mode import run_manual_mode
+from .notifications import NotificationSender
 
 # Set up logging
 def setup_logging(config: Config):
@@ -41,6 +42,27 @@ def run_booking(config: Config, headless: bool = False) -> bool:
     """Run a single booking attempt."""
     logger = logging.getLogger(__name__)
     from datetime import datetime
+    from pathlib import Path
+    
+    # Set up notification sender
+    notification = NotificationSender()
+    
+    # Capture log output
+    log_capture = []
+    log_handler = None
+    
+    # Set up log capture if email is configured
+    if notification.email_from and notification.email_password:
+        class LogCaptureHandler(logging.Handler):
+            def __init__(self, capture_list):
+                super().__init__()
+                self.capture_list = capture_list
+            def emit(self, record):
+                self.capture_list.append(self.format(record))
+        
+        log_handler = LogCaptureHandler(log_capture)
+        log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        logger.addHandler(log_handler)
     
     logger.info("=" * 80)
     logger.info(f"Starting booking process at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -52,65 +74,94 @@ def run_booking(config: Config, headless: bool = False) -> bool:
         logger.info(f"  Booking window: {config.booking_window_days} days ahead")
     logger.info("=" * 80)
     
-    with sync_playwright() as p:
-        # Launch browser
-        browser = p.chromium.launch(headless=headless)
-        
-        try:
-            # Set up authentication
-            auth_handler = AuthHandler(config)
-            context = auth_handler.create_browser_context(browser, headless)
-            page = context.new_page()
+    booking_result = None
+    booking_success = False
+    error_message = None
+    
+    try:
+        with sync_playwright() as p:
+            # Launch browser
+            browser = p.chromium.launch(headless=headless)
             
-            # Ensure authenticated
-            if not auth_handler.ensure_authenticated(page, context, headless):
-                logger.error("❌ Authentication failed - booking cannot proceed")
-                logger.error("Please run 'python -m src.main --authenticate' to refresh authentication")
-                return False
-            
-            logger.info("✅ Authentication successful")
-            
-            # Save browser state after authentication
-            auth_handler.save_browser_state(context)
-            
-            # Set up booking engine
-            booking_engine = BookingEngine(config)
-            
-            # Attempt booking
-            result = booking_engine.attempt_booking(
-                page,
-                config.booking_times,
-                config.court_preference
-            )
-            
-            logger.info("=" * 80)
-            if result:
-                logger.info(f"✅ BOOKING SUCCESSFUL")
-                logger.info(f"   Court: {result.get('court_name', 'Unknown')}")
-                logger.info(f"   Date: {result.get('date', 'Unknown')}")
-                logger.info(f"   Time: {result.get('time', 'Unknown')}")
-                logger.info(f"   Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                return True
-            else:
-                logger.warning("⚠️  No booking was made")
-                logger.warning("   Possible reasons:")
-                logger.warning("   - No slots available at target times")
-                logger.warning("   - All slots were already booked")
-                logger.warning("   - Booking process encountered an error")
-                logger.info(f"   Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                return False
-            logger.info("=" * 80)
+            try:
+                # Set up authentication
+                auth_handler = AuthHandler(config)
+                context = auth_handler.create_browser_context(browser, headless)
+                page = context.new_page()
                 
-        except Exception as e:
-            logger.error("=" * 80)
-            logger.error(f"❌ ERROR in booking process: {e}")
-            logger.error(f"   Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.error("=" * 80)
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-        finally:
-            browser.close()
+                # Ensure authenticated
+                if not auth_handler.ensure_authenticated(page, context, headless):
+                    error_message = "Authentication failed - booking cannot proceed"
+                    logger.error(f"❌ {error_message}")
+                    logger.error("Please run 'python -m src.main --authenticate' to refresh authentication")
+                    return False
+                
+                logger.info("✅ Authentication successful")
+                
+                # Save browser state after authentication
+                auth_handler.save_browser_state(context)
+                
+                # Set up booking engine
+                booking_engine = BookingEngine(config)
+                
+                # Attempt booking
+                result = booking_engine.attempt_booking(
+                    page,
+                    config.booking_times,
+                    config.court_preference
+                )
+                
+                logger.info("=" * 80)
+                if result:
+                    booking_success = True
+                    booking_result = result
+                    logger.info(f"✅ BOOKING SUCCESSFUL")
+                    logger.info(f"   Court: {result.get('court_name', 'Unknown')}")
+                    logger.info(f"   Date: {result.get('date', 'Unknown')}")
+                    logger.info(f"   Time: {result.get('time', 'Unknown')}")
+                    logger.info(f"   Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                else:
+                    logger.warning("⚠️  No booking was made")
+                    logger.warning("   Possible reasons:")
+                    logger.warning("   - No slots available at target times")
+                    logger.warning("   - All slots were already booked")
+                    logger.warning("   - Booking process encountered an error")
+                    logger.info(f"   Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info("=" * 80)
+                    
+            except Exception as e:
+                error_message = f"Error in booking process: {str(e)}"
+                logger.error("=" * 80)
+                logger.error(f"❌ {error_message}")
+                logger.error(f"   Error occurred at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.error("=" * 80)
+                import traceback
+                logger.error(traceback.format_exc())
+                log_capture.append(traceback.format_exc())
+            finally:
+                browser.close()
+    except Exception as e:
+        error_message = f"Critical error: {str(e)}"
+        logger.error(f"❌ {error_message}")
+        import traceback
+        log_capture.append(traceback.format_exc())
+    
+    # Remove log capture handler
+    if log_handler:
+        logger.removeHandler(log_handler)
+    
+    # Send notification
+    try:
+        notification.send_booking_notification(
+            success=booking_success,
+            booking_details=booking_result,
+            log_lines=log_capture if log_capture else None,
+            error_message=error_message
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send notification: {e}")
+    
+    return booking_success
 
 
 def run_scheduled(config: Config, headless: bool = False):

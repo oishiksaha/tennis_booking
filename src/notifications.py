@@ -1,10 +1,11 @@
-"""Notification system for authentication status alerts."""
+"""Notification system for booking and authentication status alerts."""
 import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime
+from pathlib import Path
 import os
 
 logger = logging.getLogger(__name__)
@@ -14,13 +15,32 @@ class NotificationSender:
     """Send notifications via email or SMS."""
     
     def __init__(self):
-        """Initialize notification sender."""
+        """Initialize notification sender.
+        
+        Supports multiple email providers:
+        - Gmail (requires App Password with 2FA)
+        - Outlook/Hotmail
+        - Yahoo
+        - Custom SMTP server
+        """
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
-        self.email_from = os.getenv('NOTIFICATION_EMAIL_FROM')
-        self.email_to = os.getenv('NOTIFICATION_EMAIL_TO')
-        self.email_password = os.getenv('NOTIFICATION_EMAIL_PASSWORD')
+        self.email_from = os.getenv('NOTIFICATION_EMAIL_FROM') or os.getenv('EMAIL_FROM')
+        self.email_to = os.getenv('NOTIFICATION_EMAIL_TO') or os.getenv('EMAIL_TO')
+        self.email_password = os.getenv('NOTIFICATION_EMAIL_PASSWORD') or os.getenv('EMAIL_PASSWORD')
         self.sms_email = os.getenv('SMS_EMAIL')  # Email-to-SMS gateway
+        
+        # Auto-detect SMTP settings based on email domain
+        if self.email_from and not os.getenv('SMTP_SERVER'):
+            if '@gmail.com' in self.email_from:
+                self.smtp_server = 'smtp.gmail.com'
+                self.smtp_port = 587
+            elif '@outlook.com' in self.email_from or '@hotmail.com' in self.email_from:
+                self.smtp_server = 'smtp-mail.outlook.com'
+                self.smtp_port = 587
+            elif '@yahoo.com' in self.email_from:
+                self.smtp_server = 'smtp.mail.yahoo.com'
+                self.smtp_port = 587
         
     def send_email(self, subject: str, body: str, to_email: Optional[str] = None) -> bool:
         """Send email notification.
@@ -87,6 +107,79 @@ class NotificationSender:
         else:
             logger.warning("SMS email gateway format not recognized. Use format: phone@carrier.com")
             return False
+    
+    def send_booking_notification(
+        self, 
+        success: bool, 
+        booking_details: Optional[Dict] = None,
+        log_lines: Optional[list] = None,
+        error_message: Optional[str] = None
+    ) -> bool:
+        """Send booking attempt notification with logs.
+        
+        Args:
+            success: Whether booking was successful
+            booking_details: Dict with court_name, date, time if successful
+            log_lines: Recent log lines to include
+            error_message: Error message if failed
+            
+        Returns:
+            True if notification sent successfully
+        """
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        if success and booking_details:
+            subject = f"✅ Tennis Bot: Booking Successful - {booking_details.get('court_name', 'Unknown')}"
+            body = f"""Tennis Booking Bot - Booking Result
+
+Status: ✅ SUCCESS
+Time: {timestamp}
+
+Booking Details:
+  Court: {booking_details.get('court_name', 'Unknown')}
+  Date: {booking_details.get('date', 'Unknown')}
+  Time: {booking_details.get('time', 'Unknown')}
+
+The booking was completed successfully!
+"""
+        else:
+            subject = "❌ Tennis Bot: Booking Failed"
+            body = f"""Tennis Booking Bot - Booking Result
+
+Status: ❌ FAILED
+Time: {timestamp}
+
+The booking attempt did not succeed.
+
+"""
+            if error_message:
+                body += f"Error: {error_message}\n\n"
+            else:
+                body += "Possible reasons:\n"
+                body += "  - No slots available at target times\n"
+                body += "  - All slots were already booked\n"
+                body += "  - Booking process encountered an error\n\n"
+        
+        # Add log lines if provided
+        if log_lines:
+            body += "\n" + "=" * 60 + "\n"
+            body += "Recent Log Output:\n"
+            body += "=" * 60 + "\n"
+            body += "\n".join(log_lines[-50:])  # Last 50 lines
+            body += "\n" + "=" * 60 + "\n"
+        
+        # Try email first
+        email_sent = self.send_email(subject, body)
+        
+        # Also try SMS if configured
+        sms_sent = False
+        if self.sms_email:
+            sms_msg = f"Tennis Bot: {'✅ Booked' if success else '❌ Failed'} - {timestamp}"
+            if success and booking_details:
+                sms_msg += f" {booking_details.get('court_name')} {booking_details.get('time')}"
+            sms_sent = self.send_sms(sms_msg)
+        
+        return email_sent or sms_sent
     
     def send_auth_status_notification(self, is_authenticated: bool, details: str = "") -> bool:
         """Send authentication status notification.

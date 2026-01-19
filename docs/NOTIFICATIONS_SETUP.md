@@ -1,12 +1,22 @@
-# Authentication Notifications Setup
+# Booking & Authentication Notifications Setup
 
 **Last Updated**: January 18, 2026
 
-This guide explains how to set up email and SMS notifications for authentication status checks.
+This guide explains how to set up email and SMS notifications for:
+- **Booking attempts** (success/failure with logs) - **Automatic after each booking**
+- **Authentication status checks** (scheduled checks on Monday/Tuesday)
 
 ## Overview
 
-The notification system will:
+The notification system provides:
+
+### Automatic Booking Notifications
+- **Sent after every booking attempt** (when cron runs or manual booking)
+- Includes booking result (success/failure)
+- Includes recent log output for debugging
+- **No additional setup needed** - just configure email credentials
+
+### Scheduled Authentication Checks
 - Check authentication status on Monday and Tuesday at 9 AM
 - Send email and/or SMS notifications
 - Alert you if authentication is working or failed
