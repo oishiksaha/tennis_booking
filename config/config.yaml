@@ -1,0 +1,63 @@
+# Tennis Booking Bot Configuration
+
+# Target booking times (24-hour format)
+booking_times:
+  - "07:00"  # 7 AM
+  - "08:00"  # 8 AM
+  - "17:00"  # 5 PM
+  - "18:00"  # 6 PM
+  - "19:00"  # 7 PM
+
+# Booking window (days ahead)
+booking_window_days: 7
+
+# Court preference
+# Options: "any", "specific", "preference_list"
+court_preference: "any"
+
+# Specific court names (if court_preference is "specific" or "preference_list")
+preferred_courts: []
+
+# Booking system URLs
+urls:
+  base: "https://membership.gocrimson.com"
+  program: "https://membership.gocrimson.com/program?classificationid=dc42ec33-82df-44ca-b06c-109c3685395d"
+
+# CSS Selectors (based on old version)
+selectors:
+  cookie_button: "#gdpr-cookie-accept"
+  profile_button: "#btnProfile"  # User profile button (top right) - present when authenticated
+  sign_in_button: "button:has-text('Sign in')"  # Sign in button - present when NOT authenticated
+  court_link: ".img-link"
+  date_button: "button[data-year][data-month][data-day]:not(.single-date-select-mobile)"  # Exclude mobile buttons
+  right_arrow: "button.single-date-right-arrow"
+  time_slot_card: ".program-instance-card"
+  spots_tag: ".spots-tag"
+  select_button: "button.program-select-btn"
+  register_button: "#registerBtn"
+  proceed_to_checkout: "button.btn-NextRegistrationStep"
+  checkout_button: "#checkoutButton"
+  final_checkout: "#btnCheckoutCart"
+  instance_time: ".instance-time-header"
+  location_div: 'div[title="Location"]'
+
+# Booking behavior
+booking:
+  max_retries: 3
+  retry_delay_seconds: 5
+  timeout_seconds: 30
+  headless: false  # Set to true for cloud deployment
+
+# Scheduler settings
+scheduler:
+  check_interval_minutes: 1  # How often to check if it's time to book
+  # Note: Slots open exactly on the hour (e.g., 7 PM Thursday next week opens at 7 PM this Thursday)
+  # The scheduler runs at :00 to book immediately when slots become available
+
+# Test mode settings (for local testing)
+test_mode:
+  enabled: true  # Set to true to enable test mode
+  target_date: "2026-01-22"  # Target date for test booking (YYYY-MM-DD format) - Thursday Jan 22
+  target_court: "Murr Tennis: Court 2"  # Specific court to book in test mode
+  target_time: "08:00"  # Target time for test booking (24-hour format) - 8 AM
+
