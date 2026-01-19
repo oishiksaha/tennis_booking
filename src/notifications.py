@@ -10,6 +10,14 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# Try to import SendGrid (optional)
+try:
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail
+    SENDGRID_AVAILABLE = True
+except ImportError:
+    SENDGRID_AVAILABLE = False
+
 
 class NotificationSender:
     """Send notifications via email or SMS."""
@@ -18,11 +26,17 @@ class NotificationSender:
         """Initialize notification sender.
         
         Supports multiple email providers:
+        - SendGrid (API-based, recommended for automated emails)
         - Gmail (requires App Password with 2FA)
         - Outlook/Hotmail
         - Yahoo
         - Custom SMTP server
         """
+        # SendGrid configuration (preferred if available)
+        self.sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
+        self.use_sendgrid = bool(self.sendgrid_api_key and SENDGRID_AVAILABLE)
+        
+        # SMTP configuration (fallback)
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.email_from = os.getenv('NOTIFICATION_EMAIL_FROM') or os.getenv('EMAIL_FROM')
@@ -45,6 +59,8 @@ class NotificationSender:
     def send_email(self, subject: str, body: str, to_email: Optional[str] = None) -> bool:
         """Send email notification.
         
+        Uses SendGrid API if configured, otherwise falls back to SMTP.
+        
         Args:
             subject: Email subject
             body: Email body
@@ -53,15 +69,48 @@ class NotificationSender:
         Returns:
             True if sent successfully, False otherwise
         """
-        if not self.email_from or not self.email_password:
-            logger.warning("Email credentials not configured. Skipping email notification.")
-            return False
-            
         to_email = to_email or self.email_to
         if not to_email:
             logger.warning("No recipient email configured. Skipping email notification.")
             return False
         
+        # Try SendGrid first (if configured)
+        if self.use_sendgrid:
+            return self._send_email_sendgrid(subject, body, to_email)
+        
+        # Fall back to SMTP
+        if not self.email_from or not self.email_password:
+            logger.warning("Email credentials not configured. Skipping email notification.")
+            return False
+        
+        return self._send_email_smtp(subject, body, to_email)
+    
+    def _send_email_sendgrid(self, subject: str, body: str, to_email: str) -> bool:
+        """Send email using SendGrid API."""
+        try:
+            if not SENDGRID_AVAILABLE:
+                logger.error("SendGrid package not installed. Install with: pip install sendgrid")
+                return False
+            
+            message = Mail(
+                from_email=self.email_from or 'tennisbot2026@outlook.com',
+                to_emails=to_email,
+                subject=subject,
+                plain_text_content=body
+            )
+            
+            sg = SendGridAPIClient(self.sendgrid_api_key)
+            response = sg.send(message)
+            
+            logger.info(f"Email notification sent via SendGrid to {to_email} (status: {response.status_code})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send email via SendGrid: {e}")
+            return False
+    
+    def _send_email_smtp(self, subject: str, body: str, to_email: str) -> bool:
+        """Send email using SMTP."""
         try:
             msg = MIMEMultipart()
             msg['From'] = self.email_from
@@ -75,11 +124,11 @@ class NotificationSender:
                 server.login(self.email_from, self.email_password)
                 server.send_message(msg)
             
-            logger.info(f"Email notification sent to {to_email}")
+            logger.info(f"Email notification sent via SMTP to {to_email}")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to send email notification: {e}")
+            logger.error(f"Failed to send email via SMTP: {e}")
             return False
     
     def send_sms(self, message: str, phone_number: Optional[str] = None) -> bool:
