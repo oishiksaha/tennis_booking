@@ -23,6 +23,7 @@ This index provides quick access to all important documentation for the Tennis B
 - **[PROFILE_BUTTON_FIX.md](PROFILE_BUTTON_FIX.md)** - Technical fix for profile button visibility detection
 - **[SCRIPTS_REFERENCE.md](SCRIPTS_REFERENCE.md)** - Complete reference guide for all scripts
 - **[QUICK_COMMANDS.md](QUICK_COMMANDS.md)** - Quick command reference
+- **[NOTIFICATIONS_SETUP.md](NOTIFICATIONS_SETUP.md)** - Email/SMS notification setup
 - **[IMPROVEMENTS_RECOMMENDED.md](IMPROVEMENTS_RECOMMENDED.md)** - Recommended improvements and best practices
 
 ## 📁 Complete File Organization
